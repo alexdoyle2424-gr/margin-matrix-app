@@ -3,6 +3,44 @@ from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="Margin Matrix", layout="centered")
 
+# GLOBAL CSS OVERRIDES FOR MOBILE RESPONSIVENESS AND CONTRAST
+st.markdown("""
+<style>
+    /* 1. FORCE SIDEBAR CONTRAST (Fixes faint text on mobile) */
+    [data-testid="stSidebar"] h3, 
+    [data-testid="stSidebar"] label, 
+    [data-testid="stSidebar"] p {
+        color: #111111 !important;
+    }
+    
+    /* 2. FORCE MAIN DASHBOARD METRIC CONTRAST (Fixes invisible $ numbers) */
+    [data-testid="stMetricLabel"] {
+        color: #555555 !important;
+    }
+    [data-testid="stMetricValue"] {
+        color: #111111 !important;
+        font-weight: 700 !important;
+    }
+
+    /* 3. RESPONSIVE PRICE BOX (Prevents numbers from snapping to a new line) */
+    .metric-box h1 {
+        font-size: 4.5rem !important;
+    }
+    
+    @media (max-width: 640px) {
+        .metric-box h1 {
+            font-size: 2.4rem !important; /* Dynamically shrinks price text on mobile screens */
+        }
+        .metric-box h3 {
+            font-size: 1rem !important;
+        }
+        /* Tightens layout padding on mobile devices */
+        [data-testid="stMetricBlock"] {
+            padding: 10px !important;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
 # --- ACCESS GATE ---
 query_params = st.query_params
 access_token = query_params.get("access", "").strip()
@@ -127,7 +165,56 @@ col3.metric("True Total Cost", f"${total_cost:,.2f}")
 st.markdown(f"""
     <div class="metric-box">
         <h3 style="margin-bottom:0px; text-transform: uppercase;">Final Quoted Price</h3>
-        <h1 style="font-size: 5rem; margin-top:0px; margin-bottom: 0px;">${final_price:,.2f}</h1>
+        <h1 style="margin-top:0px; margin-bottom: 0px;">${final_price:,.2f}</h1>
         <h3 style="color:#333; margin-top:10px;">ACTUAL DOLLAR PROFIT: ${actual_profit:,.2f}</h3>
     </div>
 """, unsafe_allow_html=True)
+# 6. THE PDF EXPORT ENGINE
+from fpdf import FPDF
+import io
+
+# Create the PDF object
+pdf = FPDF()
+pdf.add_page()
+
+# Branding & Title
+pdf.set_font("Courier", "B", 24)
+pdf.cell(0, 20, "[ THE MARGIN MATRIX ]", align="C", ln=True)
+
+pdf.set_font("Courier", "", 10)
+pdf.cell(0, 5, "ACCOUNTABILITY & RESULTS ENGINEERING", align="C", ln=True)
+pdf.line(10, 35, 200, 35)
+pdf.ln(15)
+
+# Cost Breakdown Section
+pdf.set_font("Courier", "B", 12)
+pdf.cell(0, 10, "COST BREAKDOWN", ln=True)
+pdf.set_font("Courier", "", 12)
+pdf.cell(100, 10, f"True Material Cost: ${true_material:,.2f}")
+pdf.cell(0, 10, f"Risk-Adjusted Labor: ${risk_labor:,.2f}", ln=True)
+pdf.cell(100, 10, f"Overhead Allocation: ${(total_cost - true_material - risk_labor):,.2f}")
+pdf.cell(0, 10, f"True Total Cost: ${total_cost:,.2f}", ln=True)
+pdf.ln(10)
+
+# Final Price Box
+pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+pdf.ln(10)
+
+pdf.set_font("Courier", "B", 16)
+pdf.cell(0, 10, "FINAL QUOTED PRICE", align="C", ln=True)
+
+pdf.set_font("Courier", "B", 36)
+pdf.cell(0, 20, f"${final_price:,.2f}", align="C", ln=True)
+
+pdf.set_font("Courier", "", 12)
+pdf.cell(0, 10, f"ACTUAL DOLLAR PROFIT: ${actual_profit:,.2f}", align="C", ln=True)
+
+# Generate the download button
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.download_button(
+    label="📄 DOWNLOAD OFFICIAL QUOTE (PDF)",
+    data=bytes(pdf.output()),
+    file_name="Margin_Matrix_Quote.pdf",
+    mime="application/octet-stream", 
+    use_container_width=True
+)
